@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Week 2: Enhanced File I/O and Parsing
@@ -46,6 +48,9 @@ class Program
                 case "3":
                     LevelUpCharacter();
                     break;
+                case "4":
+                    EditEquipment();
+                    break;
                 case "0":
                     running = false;
                     Console.WriteLine("\nGoodbye! Thanks for playing.");
@@ -70,6 +75,7 @@ class Program
         Console.WriteLine("1. Display All Characters");
         Console.WriteLine("2. Add New Character");
         Console.WriteLine("3. Level Up Character");
+        Console.WriteLine("4. Edit Character Equipment");
         Console.WriteLine("0. Exit");
     }
 
@@ -275,10 +281,10 @@ class Program
         // Detect leading quote, find closing quote using IndexOf, then Substring to extract the name.
         if (line.StartsWith("\""))
         {
-            int closingQuote = line.IndexOf('\"', 1);              // README: String.IndexOf usage
+            int closingQuote = line.IndexOf('\"', 1); // README: String.IndexOf usage
             if (closingQuote <= 0) return false;
 
-            name = line.Substring(1, closingQuote - 1).Trim();     // README: String.Substring + Trim
+            name = line.Substring(1, closingQuote - 1).Trim(); // README: String.Substring + Trim
 
             int afterQuote = closingQuote + 1;
             if (afterQuote >= line.Length || line[afterQuote] != ',') return false;
@@ -312,4 +318,121 @@ class Program
         string safeName = name.Contains(',') ? $"\"{name}\"" : name;
         return $"{safeName},{profession},{level},{hp},{equipment}";
     }
+    static void EditEquipment() //copilot was used for some help with this method
+    {
+        Console.WriteLine("\n=== Edit Equipment ===\n");
+
+        if (!File.Exists(filePath))
+        {
+            Console.WriteLine("Data file not found.");
+            return;
+        }
+
+        var lines = File.ReadAllLines(filePath);
+        var dataLineIndices = new List<int>();
+
+        // List characters (skip header, robust parse)
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (i == 0 && string.Equals(line.Trim(), HeaderLine, StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (TryParseCsvLine(line, out var name, out var profession, out var level, out _, out var equipmentSummary))
+            {
+                dataLineIndices.Add(i);
+                var summaryItems = equipmentSummary.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                Console.WriteLine($"{dataLineIndices.Count}. {name} ({profession} L{level}) - {summaryItems.Length} item(s)");
+            }
+        }
+
+        if (dataLineIndices.Count == 0)
+        {
+            Console.WriteLine("No characters found.");
+            return;
+        }
+
+        Console.Write("\nSelect a character: ");
+        if (!int.TryParse((Console.ReadLine() ?? "").Trim(), out int selection))
+        {
+            Console.WriteLine("Invalid input.");
+            return;
+        }
+        int listIndex = selection - 1;
+        if (listIndex < 0 || listIndex >= dataLineIndices.Count)
+        {
+            Console.WriteLine("Selection out of range.");
+            return;
+        }
+
+        int lineIndex = dataLineIndices[listIndex];
+        var lineToParse = lines[lineIndex];
+
+        if (!TryParseCsvLine(lineToParse, out var nameField, out var classField, out var levelField, out var hpField, out var selectedEquipment))
+        {
+            Console.WriteLine("Selected character data is malformed.");
+            return;
+        }
+
+        var selectedItems = selectedEquipment.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        Console.WriteLine("\nEquipment:");
+        if (selectedItems.Count == 0) Console.WriteLine(" - (none)");
+        else for (int i = 0; i < selectedItems.Count; i++) Console.WriteLine($"{i + 1}. {selectedItems[i]}");
+
+        Console.WriteLine("\nChoose an action:");
+        Console.WriteLine("1. Add item");
+        Console.WriteLine("2. Remove item");
+        Console.Write("Enter choice: ");
+
+        var action = (Console.ReadLine() ?? "").Trim();
+        switch (action)
+        {
+            case "1":
+                Console.Write("Enter item to add: ");
+                var newItem = (Console.ReadLine() ?? "").Trim();
+                if (!string.IsNullOrWhiteSpace(newItem))
+                {
+                    selectedItems.Add(newItem);
+                }
+                else
+                {
+                    Console.WriteLine("Item cannot be empty.");
+                    return;
+                }
+                break;
+
+            case "2":
+                Console.Write("Enter item number to remove: ");
+                if (!int.TryParse((Console.ReadLine() ?? "").Trim(), out int removeIndex))
+                {
+                    Console.WriteLine("Invalid input.");
+                    return;
+                }
+                int ri = removeIndex - 1;
+                if (ri < 0 || ri >= selectedItems.Count)
+                {
+                    Console.WriteLine("Selection out of range.");
+                    return;
+                }
+                selectedItems.RemoveAt(ri);
+                break;
+
+            default:
+                Console.WriteLine("Invalid choice.");
+                return;
+        }
+
+        var updatedEquipmentField = string.Join('|', selectedItems);
+        lines[lineIndex] = BuildCsvLine(nameField, classField, int.Parse(levelField), int.Parse(hpField), updatedEquipmentField);
+        File.WriteAllLines(filePath, lines);
+
+        Console.WriteLine("Equipment updated.");
+    }
+
+
+
+
+
+
 }
